@@ -11,6 +11,7 @@ async def launch_bot(bot_id, meet_url):
             headless=True,
             args=[
                 "--use-fake-ui-for-media-stream",  # Auto-bypasses hardware device permissions
+                "--use-fake-device-for-media-stream",  # Simulates a fake webcam/mic to satisfy the UI loading
                 "--mute-audio",  # Disables incoming audio stream decoding to preserve memory
                 "--disable-gpu",  # Drops unnecessary graphical processor loops on servers
             ],
@@ -25,42 +26,37 @@ async def launch_bot(bot_id, meet_url):
 
         try:
             print(f"[Bot {bot_id}] Routing to network stream target...")
-            # Navigate and wait for DOM elements to drop structural idle markers
-            await page.goto(meet_url, wait_until="domcontentloaded", timeout=60000)
+            # Use 'load' to guarantee the DOM tree structure is available
+            await page.goto(meet_url, wait_until="load", timeout=60000)
 
-            # --- PRE-CHECK: SELF-HEALING DISMISSALS ---
-            # Automatically try to bypass cookie policies or regional consent prompts
-            try:
-                consent_buttons = page.locator(
-                    "button:has-text('Accept'), button:has-text('Got it'), button:has-text('I agree')"
-                )
-                if await consent_buttons.first.is_visible(timeout=2000):
-                    await consent_buttons.first.click()
-                    print(f"[Bot {bot_id}] Consent overlay dismissed.")
-            except:
-                pass  # Move on if no interstitial walls are present
+            # Give the page a moment to process media check transitions
+            await page.wait_for_timeout(5000)
 
             # --- STEP 1: IDENTITY FIELDS ---
             print(f"[Bot {bot_id}] Locating interactive name assignment fields...")
 
-            # Semantic matching array ranging from exact placeholder names to general definitions
-            name_input = page.locator(
-                "input[aria-label='Your name'], input[placeholder='Your name'], input[type='text']"
-            )
+            name_selector = "input[aria-label='Your name'], input[placeholder='Your name'], input[type='text']"
 
-            # Enforce execution patience up to 30 seconds
-            await name_input.first.wait_for(state="visible", timeout=30000)
-            await name_input.first.fill(f"CloudUser_{bot_id}")
-            print(f"[Bot {bot_id}] Assigned variable 'CloudUser_{bot_id}' to input.")
+            # Wait for the input element to exist in the DOM (ignoring visibility constraints)
+            input_element = page.locator(name_selector).first
+            await input_element.wait_for(state="attached", timeout=30000)
+
+            # Force fill the element using Javascript evaluation if the CSS visibility flag is hidden
+            await input_element.evaluate(
+                f"(el) => {{ el.value = 'CloudUser_{bot_id}'; el.dispatchEvent(new Event('input', {{ bubbles: true }})); el.dispatchEvent(new Event('change', {{ bubbles: true }})); }}"
+            )
+            print(
+                f"[Bot {bot_id}] Forcefully assigned 'CloudUser_{bot_id}' via DOM injection."
+            )
 
             # --- STEP 2: SESSION SUBMISSION ---
-            # Search for submission controls that either contain standard text strings
             join_button = page.locator(
                 "button:has-text('Join'), button:has-text('Ask to join'), button:has-text('Join now')"
-            )
+            ).first
 
-            await join_button.first.wait_for(state="visible", timeout=10000)
-            await join_button.first.click()
+            await join_button.wait_for(state="attached", timeout=10000)
+            # Force click the button using a programmatic trigger to bypass structural overlays
+            await join_button.click(force=True)
             print(f"[Bot {bot_id}] Sent registration/connection payload.")
 
             # Keep connection active for 15 minutes before cycle teardown
@@ -81,18 +77,16 @@ async def main():
         print("[CRITICAL] Environment configuration execution missing MEET_URL link.")
         sys.exit(1)
 
-    # Offset batch logic to ensure 4 distinct containers generate clean sequence blocks
     start_id = batch_num * 10
     print(
         f"[*] Initializing Container Node Batch. Managing range: [{start_id} to {start_id + 9}]"
     )
 
-    # Build and concurrently deploy 10 jobs per runner, staggered to mitigate throttling
     tasks = []
     for i in range(10):
         bot_id = start_id + i
         tasks.append(launch_bot(bot_id, meet_url))
-        await asyncio.sleep(3)  # Increased stagger to 3 seconds for connection safety
+        await asyncio.sleep(3)  # Stagger to mitigate API rate drops
 
     await asyncio.gather(*tasks)
 
