@@ -5,77 +5,94 @@ from playwright.async_api import async_playwright
 
 
 async def launch_bot(bot_id, meet_url):
-    """Launches a single isolated headless browser instance"""
+    """Launches an optimized, resilient headless instance to join the session"""
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
             args=[
-                "--use-fake-ui-for-media-stream",  # Auto-bypass camera/mic alerts
-                "--mute-audio",  # Don't decode audio (saves massive cloud CPU)
-                "--disable-gpu",  # Serverless instances don't have hardware GPUs
+                "--use-fake-ui-for-media-stream",  # Auto-bypasses hardware device permissions
+                "--mute-audio",  # Disables incoming audio stream decoding to preserve memory
+                "--disable-gpu",  # Drops unnecessary graphical processor loops on servers
             ],
         )
 
-        # Open an isolated incognito browser context
+        # Generate a clean, isolated browsing context
         context = await browser.new_context(
-            permissions=["microphone", "camera"]
+            permissions=["microphone", "camera"],
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         )
         page = await context.new_page()
 
         try:
-            print(f"[Bot {bot_id}] Navigating to URL...")
-            await page.goto(meet_url, timeout=45000)
+            print(f"[Bot {bot_id}] Routing to network stream target...")
+            # Navigate and wait for DOM elements to drop structural idle markers
+            await page.goto(meet_url, wait_until="domcontentloaded", timeout=60000)
 
-            # Block heavy image assets to optimize cloud network bandwidth
-            await page.route(
-                "**/*",
-                lambda route: (
-                    route.abort()
-                    if route.request.resource_type in ["image", "media", "font"]
-                    else route.continue_()
-                ),
+            # --- PRE-CHECK: SELF-HEALING DISMISSALS ---
+            # Automatically try to bypass cookie policies or regional consent prompts
+            try:
+                consent_buttons = page.locator(
+                    "button:has-text('Accept'), button:has-text('Got it'), button:has-text('I agree')"
+                )
+                if await consent_buttons.first.is_visible(timeout=2000):
+                    await consent_buttons.first.click()
+                    print(f"[Bot {bot_id}] Consent overlay dismissed.")
+            except:
+                pass  # Move on if no interstitial walls are present
+
+            # --- STEP 1: IDENTITY FIELDS ---
+            print(f"[Bot {bot_id}] Locating interactive name assignment fields...")
+
+            # Semantic matching array ranging from exact placeholder names to general definitions
+            name_input = page.locator(
+                "input[aria-label='Your name'], input[placeholder='Your name'], input[type='text']"
             )
 
-            # Wait for the entry name text input field to render
-            await page.wait_for_selector("input[type='text']", timeout=15000)
-            await page.fill("input[type='text']", f"CloudUser_{bot_id}")
+            # Enforce execution patience up to 30 seconds
+            await name_input.first.wait_for(state="visible", timeout=30000)
+            await name_input.first.fill(f"CloudUser_{bot_id}")
+            print(f"[Bot {bot_id}] Assigned variable 'CloudUser_{bot_id}' to input.")
 
-            # Click the main submission / entry button
-            join_button = page.locator("button:has-text('Join')")
-            await join_button.click()
-            print(f"[Bot {bot_id}] Successfully connected to session.")
+            # --- STEP 2: SESSION SUBMISSION ---
+            # Search for submission controls that either contain standard text strings
+            join_button = page.locator(
+                "button:has-text('Join'), button:has-text('Ask to join'), button:has-text('Join now')"
+            )
 
-            # Keep the bot alive inside the room for 15 minutes (900 seconds)
+            await join_button.first.wait_for(state="visible", timeout=10000)
+            await join_button.first.click()
+            print(f"[Bot {bot_id}] Sent registration/connection payload.")
+
+            # Keep connection active for 15 minutes before cycle teardown
             await asyncio.sleep(900)
 
         except Exception as e:
-            print(f"[Bot {bot_id}] Error: {e}")
+            print(f"[Bot {bot_id}] Exception encountered during lifecycle: {e}")
         finally:
             await context.close()
             await browser.close()
 
 
 async def main():
-    # Grab configuration parameters sent from the GitHub user interface
     meet_url = os.environ.get("MEET_URL")
     batch_num = int(os.environ.get("BATCH_NUM", 0))
 
     if not meet_url:
-        print("Error: MEET_URL environment variable is missing.")
+        print("[CRITICAL] Environment configuration execution missing MEET_URL link.")
         sys.exit(1)
 
-    # Each cloud runner handles a unique offset block of 10 bots
+    # Offset batch logic to ensure 4 distinct containers generate clean sequence blocks
     start_id = batch_num * 10
     print(
-        f"[*] Cloud Machine Initiated. Running Bots {start_id} through {start_id + 9}..."
+        f"[*] Initializing Container Node Batch. Managing range: [{start_id} to {start_id + 9}]"
     )
 
-    # Launch 10 instances concurrently on this specific machine pool, staggered by 2 seconds
+    # Build and concurrently deploy 10 jobs per runner, staggered to mitigate throttling
     tasks = []
     for i in range(10):
         bot_id = start_id + i
         tasks.append(launch_bot(bot_id, meet_url))
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)  # Increased stagger to 3 seconds for connection safety
 
     await asyncio.gather(*tasks)
 
