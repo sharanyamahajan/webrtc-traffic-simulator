@@ -2,7 +2,11 @@ import asyncio
 import os
 import sys
 from playwright.async_api import async_playwright
-
+PROXY_POOL = [
+    "http://username:password@your-proxy-provider.com:port",
+    "http://username:password@your-proxy-provider.com:port",
+    # Populate with up to 10-40 unique residential proxy endpoints
+]
 # =====================================================================
 # SYSTEM CONFIGURATION: RESIDENTIAL PROXIES
 # If left empty, the script will use the default GitHub Cloud IP (highly likely to get flagged)
