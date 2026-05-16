@@ -1,6 +1,6 @@
 import asyncio
 import os
-import random  # Added to handle random name selection
+import random  # Handles random name selection
 import sys
 from playwright.async_api import async_playwright
 
@@ -13,7 +13,6 @@ PROXY_POOL = [
 
 # =====================================================================
 # INDIAN NAMES POOL
-# Add as many names as you like to this list!
 # =====================================================================
 INDIAN_NAMES = [
     "Aarav Sharma",
@@ -135,8 +134,16 @@ async def launch_bot(bot_id, meet_url, proxy_server=None):
                     "No active entry submission element discovered."
                 )
 
-            # Keep connection alive in the meeting
-            await asyncio.sleep(900)
+            # --- STEP 3: THE KEEP-ALIVE LOOP (WHAT WE FIXED) ---
+            print(
+                f"[Bot {bot_id}] Successfully inside room. Starting keep-alive cycle."
+            )
+
+            # Runs a loop for 20 minutes (120 cycles * 10 seconds) to keep the browser alive
+            for _ in range(120):
+                await page.wait_for_timeout(10000)  # Check in every 10 seconds
+                # Small page action to keep the network connection active so GitHub doesn't idle out
+                await page.evaluate("window.scrollTo(0, 1);")
 
         except Exception as e:
             try:
