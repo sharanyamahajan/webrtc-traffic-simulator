@@ -11,16 +11,21 @@ on:
 jobs:
   deploy_nodes:
     runs-on: ubuntu-latest
+    
+    # ─── THIS IS EXACTLY WHERE IT GOES ───
     strategy:
-      # This matrix creates 4 entirely separate servers running simultaneously
+      max-parallel: 4  # Forces GitHub to run all 4 servers at the exact same time
+      fail-fast: false
       matrix:
         batch: [0, 1, 2, 3]
+    # ─────────────────────────────────────
+
     steps:
     - name: Pull Code From Repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Initialize Python Environment
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
