@@ -1,6 +1,6 @@
 import asyncio
 import os
-import random  # Handles random name selection
+import random  # Handles random name selection and timing jitter
 import sys
 from playwright.async_api import async_playwright
 
@@ -90,7 +90,9 @@ async def launch_bot(bot_id, meet_url, proxy_server=None):
         try:
             print(f"[Bot {bot_id}] Routing to network stream target...")
             await page.goto(meet_url, wait_until="domcontentloaded", timeout=60000)
-            await page.wait_for_timeout(6000)
+
+            # Introduce random artificial pause simulating a human reading the loading page
+            await page.wait_for_timeout(random.randint(6000, 10000))
 
             # --- STEP 1: IDENTITY INPUT (RANDOM INDIAN NAME) ---
             name_selector = "input[aria-label='Your name'], input[placeholder='Your name'], input[type='text']"
@@ -108,7 +110,7 @@ async def launch_bot(bot_id, meet_url, proxy_server=None):
             print(
                 f"[Bot {bot_id}] Assigned identity successfully: {random_name}"
             )
-            await page.wait_for_timeout(1000)
+            await page.wait_for_timeout(random.randint(1500, 3000))
 
             # --- STEP 2: OPEN ENTRY SUBMISSION ---
             join_selectors = [
@@ -134,7 +136,7 @@ async def launch_bot(bot_id, meet_url, proxy_server=None):
                     "No active entry submission element discovered."
                 )
 
-            # --- STEP 3: THE KEEP-ALIVE LOOP (WHAT WE FIXED) ---
+            # --- STEP 3: THE KEEP-ALIVE LOOP ---
             print(
                 f"[Bot {bot_id}] Successfully inside room. Starting keep-alive cycle."
             )
@@ -177,7 +179,11 @@ async def main():
         current_proxy = PROXY_POOL[i % len(PROXY_POOL)] if PROXY_POOL else None
 
         tasks.append(launch_bot(bot_id, meet_url, current_proxy))
-        await asyncio.sleep(5)
+
+        # --- THE FIX: DYNAMIC JITTER ---
+        # Spacing out entries organically between 6 to 12 seconds tells
+        # Google's traffic monitor that these are natural, distinct clicks.
+        await asyncio.sleep(random.randint(6, 12))
 
     await asyncio.gather(*tasks)
 
